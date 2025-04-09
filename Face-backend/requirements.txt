@@ -1,0 +1,39 @@
+# Backend
+fastapi==0.110.0
+uvicorn[standard]==0.29.0
+python-multipart==0.0.9
+
+# WebSockets
+websockets==12.0
+
+# Face detection e reconhecimento
+ultralytics==8.1.37   # YOLOv8
+facenet-pytorch==2.5.3
+
+# Processamento de vídeo
+opencv-python==4.9.0.80
+opencv-python-headless==4.9.0.80  # opcional para ambientes sem GUI
+
+# Manipulação de arrays e dados
+numpy==1.26.4
+pillow==10.3.0
+
+# Banco de dados
+faiss-cpu==1.7.4
+sqlite-utils==3.36
+
+# Deep Learning
+torch==2.2.1
+torchvision==0.17.1
+
+# Modelos e LLM (opcional se fores usar LLaMA ou RAG depois)
+transformers==4.40.0
+sentence-transformers==2.6.1
+
+# Utilitários
+scikit-learn==1.4.0   # Corrigido para versão compatível
+# ou se preferir a versão mais recente
+# scikit-learn==1.5.0
+
+# Interface de usuário
+streamlit==1.22.0  # Streamlit para criação do frontend interativo
