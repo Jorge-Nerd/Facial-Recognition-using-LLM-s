@@ -37,3 +37,4 @@ scikit-learn==1.4.0   # Corrigido para versão compatível
 
 # Interface de usuário
 streamlit==1.22.0  # Streamlit para criação do frontend interativo
+streamlit-carousel
