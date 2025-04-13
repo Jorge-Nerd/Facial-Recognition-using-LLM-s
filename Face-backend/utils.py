@@ -95,11 +95,11 @@ def add_unknown_person(age,gender,frame):
         print("Face not found")
         return
 
-    mean_embedding=np.mean(np.stack(embeddings), axis=0).astype(np.float32)
+
 
     # Adicionar no FAISS
     faiss_id = index_unknown.nTotal
-    index_unknown.add(np.expand_dims(mean_embedding, axis=0))  # shape (1, 512)
+    index_unknown.add(np.expand_dims(emb, axis=0))  # shape (1, 512)
     now = datetime.datetime.now().isoformat()
     
     cursor.execute("SELECT COUNT(*) FROM strangers")
@@ -114,3 +114,43 @@ def add_unknown_person(age,gender,frame):
     conn.commit()
     conn.close()
     print(f"{name} adicionado com ID {faiss_id}")
+
+
+def reconize_face(frame, index_known, conn_known, threshold=0.75):
+    """
+    Reconhece um rosto com um frame comparado seu embedding com os embeddings conhecidos.
+    
+    Args:
+        frame: Frame da pessoa a ser detetado em tempo real que queremos reconhecer
+        index_known (faiss.Index): Index do faiss que está associado ao embedding dos rostos conhecidos
+        conn_known (sqlite3.Connection): Conexão com o bando de dados SQlite de rostos conhecidos
+        threshold (float): Limiar de distançia
+    
+    Returns:
+        tuple or None: Se um rosto reconhecido foi identificado como abaixo do limiar retorna uma tupla
+        contendo as informacoes(nome completo,idade,genero)
+    
+    """
+    
+    embedding=get_embedding(frame)
+    if embedding is None:
+        return None
+    
+    D,I=index_known.search(np.expand_dims(embedding, axis=0), k=1)
+    
+    if D[0][0] < threshold:
+        faiss_id=I[0][0]
+        cursor=conn_known.cursor()
+        cursor.execute('''
+                       SELECT FIRST_NAME, LAST_NAME, AGE, GENDER FROM PERSONS WHERE FAISS_ID=?
+                       ''', (faiss_id,))
+        results=cursor.fetchone()
+        if results:
+            first_name, last_name, age, gender = results
+            return f"{filter} {last_name}", age, gender
+        else:
+            return None
+    else:
+        return None
+        
+        
