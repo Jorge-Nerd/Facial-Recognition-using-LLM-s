@@ -1,122 +1,49 @@
-import os
 import cv2
 import torch
 from facenet_pytorch import InceptionResnetV1
 import numpy as np
-from tqdm import tqdm  # Para barra de progresso
-import faiss
 import sqlite3
 import datetime
+import os
+import faiss
 
-
-
-# Diretórios
-known_faces_dir = './known_faces'
-os.makedirs(known_faces_dir, exist_ok=True)  # Criar diretório se não existir
-
-#Inicializa Faiss index
-dim=512
-index_known=faiss.IndexFlatL2(dim)
-index_unknown=faiss.IndexFlatL2(dim)
-
-
-
-# Verificar disponibilidade de GPU
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-print(f"Usando dispositivo: {device}")
+resnet = InceptionResnetV1(pretrained='vggface2').eval().to(device)
 
-# Carregue o modelo FaceNet pré-treinado
-resnet = InceptionResnetV1(pretrained='vggface2').to(device).eval()
+dim = 512
+index_known = faiss.IndexFlatL2(dim)
+index_unknown = faiss.IndexFlatL2(dim)
 
-def get_embedding(image_path):
+def get_embedding(image):
     try:
-        img = cv2.imread(image_path)
-        if img is None:
-            print(f"Não foi possível ler a imagem: {image_path}")
-            return None
-            
-        img = cv2.resize(img, (160, 160))  # Redimensione a imagem
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # Converter BGR para RGB
-        img = img.astype('float32') / 255.0  # Normalização da imagem
-        img = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0).to(device)  # Tensor no device correto
-        
+        if isinstance(image, str):
+            img = cv2.imread(image)
+        else:
+            img = image
+        img = cv2.resize(img, (160, 160))
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = img.astype('float32') / 255.0
+        img = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0).to(device)
+
         with torch.no_grad():
-            embedding = resnet(img).cpu().detach().numpy()[0]  # Extrair primeiro elemento e converter para CPU
-            
+            embedding = resnet(img).cpu().numpy()[0]
         return embedding
     except Exception as e:
-        print(f"Erro ao processar {image_path}: {str(e)}")
+        print(f"Erro no embedding: {str(e)}")
         return None
-    
+def get_average_embedding(person_dir):
+    embeddings = []
+    for image_file in os.listdir(person_dir):
+        image_path = os.path.join(person_dir, image_file)
+        if os.path.isfile(image_path):
+            embedding = get_embedding(image_path)
+            embeddings.append(embedding)
+    if len(embeddings) == 0:
+        return None
+    average_embedding = np.mean(embeddings, axis=0)
+    return average_embedding
 
-
-# Função para calcular o embedding de uma imagem
-
-
-def add_known_person(first_name, last_name,age,gender,images_path):
-    conn=sqlite3.connect('known.db')
-    cursor = conn.cursor()
-    embeddings=[]
-    for filename in os.listdir(images_path):
-        img=os.path.join(images_path,filename)
-        emb=get_embedding(img)
-        if emb is not None:
-            embeddings.append(emb)
-    
-    if not embeddings:
-        print("Face not found")
-        return
-    
-    mean_embedding=np.mean(np.stack(embeddings), axis=0).astype(np.float32)
-    
-    # Adicionar no FAISS
-    faiss_id = index_known.nTotal
-    index_known.add(np.expand_dims(mean_embedding, axis=0))  # shape (1, 512)
-    now = datetime.datetime.now().isoformat()
-    
-    cursor.execute('''
-                   INSERT INTO persons(first_name, last_name,age,gender,faiss_id, last_seen)
-                            VALUES(?,?,?,?,?)
-                   ''',(first_name, last_name,age,gender,faiss_id, now))
-    
-    conn.commit()
-    print(f"{first_name} {last_name} adicionado com ID {faiss_id}")
-    
-def add_unknown_person(age,gender,frame):
-    conn=sqlite3.connect('unknown.db')
-    cursor = conn.cursor()
-    embeddings=[]
-
-    emb=get_embedding(frame)
-    if emb is not None:
-        embeddings.append(emb)
-
-    if not embeddings:
-        print("Face not found")
-        return
-
-
-
-    # Adicionar no FAISS
-    faiss_id = index_unknown.nTotal
-    index_unknown.add(np.expand_dims(emb, axis=0))  # shape (1, 512)
-    now = datetime.datetime.now().isoformat()
-    
-    cursor.execute("SELECT COUNT(*) FROM strangers")
-    count = cursor.fetchone()[0]
-    name = f"desconhecido_{count + 1}"
-
-    cursor.execute('''
-                    INSERT INTO persons(name,age,gender,faiss_id, last_seen)
-                            VALUES(?,?,?,?,?)
-                    ''',(name,age,gender,faiss_id, now))
-
-    conn.commit()
-    conn.close()
-    print(f"{name} adicionado com ID {faiss_id}")
-
-
-def reconize_face(frame, index_known, conn_known, threshold=0.75):
+def recognize_face(frame, index, conn, threshold=0.8):
     """
     Reconhece um rosto com um frame comparado seu embedding com os embeddings conhecidos.
     
@@ -131,26 +58,95 @@ def reconize_face(frame, index_known, conn_known, threshold=0.75):
         contendo as informacoes(nome completo,idade,genero)
     
     """
-    
-    embedding=get_embedding(frame)
-    if embedding is None:
+    emb = get_embedding(frame)
+    if emb is None or index.ntotal == 0:
         return None
-    
-    D,I=index_known.search(np.expand_dims(embedding, axis=0), k=1)
-    
+
+    D, I = index.search(np.expand_dims(emb, axis=0), k=1)
     if D[0][0] < threshold:
-        faiss_id=I[0][0]
-        cursor=conn_known.cursor()
-        cursor.execute('''
-                       SELECT FIRST_NAME, LAST_NAME, AGE, GENDER FROM PERSONS WHERE FAISS_ID=?
-                       ''', (faiss_id,))
-        results=cursor.fetchone()
-        if results:
-            first_name, last_name, age, gender = results
-            return f"{filter} {last_name}", age, gender
-        else:
-            return None
-    else:
+        faiss_id = int(I[0][0])
+        cursor = conn.cursor()
+        cursor.execute("SELECT full_name, age, gender FROM persons WHERE faiss_id=?", (faiss_id,))
+        res = cursor.fetchone()
+        if res:
+            full_name, age, gender = res
+            now = datetime.datetime.now().isoformat()
+            cursor.execute("UPDATE persons SET last_seen=?, total_seen=total_seen+1 WHERE faiss_id=?", (now, faiss_id))
+            conn.commit()
+            return full_name, age, gender
+    return None
+
+def recognize_unknown_face(frame, index, conn, threshold=0.75):
+    """
+    Identificar um rosto desconhecido comparando o seu embedding com os embeddings dos rostos deconhecidos guardados no FAISS
+    
+    Args:
+        frame: É o frame(rosto) da pessoa a ser identificada em tempo real
+        index_unknown: É o index FAISS contendo os rostos das pessoas desconhecidaos
+        conn_unknown (sqlite3.Connection): Conexão com o banco de dados SQlite ods rostos desconhecidos
+        threshold (float): Limiar de distância para considerar uma correspondência.
+
+    Returns:
+        tuple or None: Se um rosto desconhecido similar for encontrado abaixo do limiar, retorna uma tupla
+                       contendo (nome, idade, gênero, faiss_id). Retorna None caso contrário.
+    """ 
+
+    emb = get_embedding(frame)
+    if emb is None or index.ntotal == 0:
         return None
-        
-        
+
+    D, I = index.search(np.expand_dims(emb, axis=0), k=1)
+    if D[0][0] < threshold:
+        faiss_id = int(I[0][0])
+        cursor = conn.cursor()
+        cursor.execute("SELECT name, age, gender FROM strangers WHERE faiss_id=?", (faiss_id,))
+        res = cursor.fetchone()
+        if res:
+            name, age, gender = res
+            now = datetime.datetime.now().isoformat()
+            cursor.execute("UPDATE strangers SET last_seen=?, total_seen=total_seen+1 WHERE faiss_id=?", (now, faiss_id))
+            conn.commit()
+            return name, age, gender
+    return None
+
+def add_person(full_name, age, gender, person_dir, index_known, conn_known):
+    cursor = conn_known.cursor()
+
+    average_embedding = get_average_embedding(person_dir)
+    if average_embedding is None:
+        return None
+
+    faiss_id = index_known.ntotal
+    index_unknown.add(np.expand_dims(average_embedding, axis=0))
+
+    cursor.execute('''
+        INSERT INTO persons (full_name, age, gender, faiss_id, last_seen)
+        VALUES (?, ?, ?, ?)
+    ''', (full_name, age, gender, faiss_id))
+
+    conn_known.commit()
+    
+
+def add_unknown_person(age, gender, frame, index_unknown, conn_unknown):
+    cursor = conn_unknown.cursor()
+
+    emb = get_embedding(frame)
+    if emb is None:
+        return None
+
+    faiss_id = index_unknown.ntotal
+    index_unknown.add(np.expand_dims(emb, axis=0))
+    now = datetime.datetime.now().isoformat()
+
+    cursor.execute("SELECT COUNT(*) FROM strangers")
+    count = cursor.fetchone()[0]
+    name = f"Visitante_{count+1}"
+
+    cursor.execute('''
+        INSERT INTO strangers (name, age, gender, faiss_id, first_seen, last_seen, total_seen)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (name, age, gender, faiss_id, now, now, 1))
+
+    conn_unknown.commit()
+    return name
+
