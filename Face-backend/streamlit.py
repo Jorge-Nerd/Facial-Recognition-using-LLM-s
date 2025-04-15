@@ -1,294 +1,141 @@
-# Streamlit app
-# streamlit_app.py
 import streamlit as st
-import websocket
-import threading
-import json
-import base64
 import cv2
 import numpy as np
+import os
+import torch
+import faiss
+import sqlite3
 from PIL import Image
-import io
-import time
-import pandas as pd
+from torchvision import transforms
+from facenet_pytorch import InceptionResnetV1
+from ultralytics import YOLO
+from datetime import datetime
 
-# Configuração da página do Streamlit
-st.set_page_config(
-    page_title="Sistema de Reconhecimento Facial",
-    page_icon="👁️",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+from utils_models import GenderAgeModel
+from utils import add_person, recognize_face, recognize_unknown_face, add_unknown_person
+from db_manager import create_db_known, create_db_unknown
 
-# Função para converter base64 para imagem
-def base64_to_image(base64_str):
-    img_bytes = base64.b64decode(base64_str)
-    img_io = io.BytesIO(img_bytes)
-    img = Image.open(img_io)
-    return img
+# Configurações iniciais
+st.set_page_config(page_title="Sistema Facial Inteligente", layout="wide")
+st.title("🎥 Sistema de Reconhecimento Facial com Cadastro em Tempo Real")
 
-# Inicialização de variáveis de estado
-if 'connected' not in st.session_state:
-    st.session_state.connected = False
-if 'ws' not in st.session_state:
-    st.session_state.ws = None
-if 'frame' not in st.session_state:
-    st.session_state.frame = None
-if 'faces' not in st.session_state:
-    st.session_state.faces = []
-if 'statistics' not in st.session_state:
-    st.session_state.statistics = {"known": 0, "new_unknown": 0, "returning_unknown": 0, "total": 0, "unique_people": 0}
-if 'chat_messages' not in st.session_state:
-    st.session_state.chat_messages = []
-if 'recommendations' not in st.session_state:
-    st.session_state.recommendations = {}
+# Criar diretórios e BD
+os.makedirs("known_faces", exist_ok=True)
+create_db_known()
+create_db_unknown()
 
-# Título principal
-st.title("Sistema de Reconhecimento Facial e Recomendação")
+# Carregamento de modelos
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+resnet = InceptionResnetV1(pretrained='vggface2').eval().to(device)
+facemodel = YOLO('./yolov8n-face.pt')
+gender_model = GenderAgeModel()
+gender_model.load_state_dict(torch.load('./gender_age_model_new.pth', map_location=device))
+gender_model.eval()
 
-# Layout em colunas
-col1, col2 = st.columns([3, 2])
+# Conexões BD
+conn_known = sqlite3.connect('known.db', check_same_thread=False)
+conn_unknown = sqlite3.connect('unknown.db', check_same_thread=False)
 
-# Coluna 1: Vídeo e estatísticas
-with col1:
-    # Área de vídeo
-    video_placeholder = st.empty()
-    
-    # Estatísticas
-    st.subheader("Estatísticas da Sessão")
-    stats_cols = st.columns(4)
-    stats_placeholder = [col.empty() for col in stats_cols]
-    
-    # Pessoas detectadas na sessão atual
-    st.subheader("Pessoas Detectadas")
-    faces_container = st.empty()
+# FAISS
+dim = 512
+faiss_known_path = "faiss_known.index"
+faiss_unknown_path = "faiss_unknown.index"
 
-# Coluna 2: Recomendações e Chat
-with col2:
-    # Recomendações
-    st.subheader("Recomendações de Produtos")
-    recommendations_container = st.empty()
-    
-    # Chat
-    st.subheader("Chat Interativo")
-    chat_container = st.container()
-    
-    # Área de entrada de mensagem
-    message_input = st.text_input("Digite uma mensagem:", key="message_input")
-    send_button = st.button("Enviar")
+index_known = faiss.read_index(faiss_known_path) if os.path.exists(faiss_known_path) else faiss.IndexFlatL2(dim)
+index_unknown = faiss.read_index(faiss_unknown_path) if os.path.exists(faiss_unknown_path) else faiss.IndexFlatL2(dim)
 
-# Sidebar para configurações
-with st.sidebar:
-    st.header("Configurações")
-    
-    # Conexão ao WebSocket
-    websocket_url = st.text_input("URL do WebSocket", "ws://localhost:8765")
-    connect_button = st.button("Conectar", key="connect")
-    disconnect_button = st.button("Desconectar", key="disconnect")
-    
-    # Status da conexão
-    connection_status = st.empty()
-    
-    # Opções de configuração
-    st.subheader("Opções")
-    show_bounding_boxes = st.checkbox("Mostrar caixas delimitadoras", value=True)
-    show_names = st.checkbox("Mostrar nomes", value=True)
-    recognition_threshold = st.slider("Limiar de reconhecimento", 0.0, 1.0, 0.6, 0.01)
-    
-    # Informações do sistema
-    st.subheader("Informações do Sistema")
-    st.info("""
-    Este sistema conecta-se a um servidor de reconhecimento facial via WebSocket.
-    O servidor processa o vídeo, identifica pessoas e envia recomendações.
-    """)
-    
-    # Botão para limpar estatísticas
-    if st.button("Limpar estatísticas"):
-        st.session_state.statistics = {"known": 0, "new_unknown": 0, "returning_unknown": 0, "total": 0, "unique_people": 0}
-        st.session_state.faces = []
-        st.session_state.chat_messages = []
-        st.session_state.recommendations = {}
+# Transformação de imagem
+transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+])
 
-# Função para processar mensagens do WebSocket
-def on_message(ws, message):
-    try:
-        data = json.loads(message)
-        
-        # Atualizar frame do vídeo
-        if "frame" in data:
-            st.session_state.frame = base64_to_image(data["frame"])
-        
-        # Atualizar rostos detectados
-        if "faces" in data:
-            st.session_state.faces = data["faces"]
-        
-        # Atualizar estatísticas
-        if "statistics" in data:
-            st.session_state.statistics = data["statistics"]
-        
-        # Atualizar recomendações
-        if "recommendations" in data:
-            st.session_state.recommendations = data["recommendations"]
-        
-        # Adicionar mensagens de chat
-        if "chat_message" in data:
-            st.session_state.chat_messages.append({
-                "sender": "Sistema",
-                "message": data["chat_message"],
-                "timestamp": time.strftime("%H:%M:%S")
-            })
-    
-    except Exception as e:
-        st.error(f"Erro ao processar mensagem: {e}")
+# ----------- FUNÇÃO: INTERFACE PARA ADICIONAR PESSOA -----------
+with st.expander("➕ Adicionar nova pessoa ao sistema"):
+    full_name = st.text_input("Nome completo")
+    age = st.number_input("Idade", 0, 120)
+    gender = st.selectbox("Gênero", ["Masculino", "Feminino"])
+    photos = st.file_uploader("Seleciona 3 fotos", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
 
-def on_error(ws, error):
-    st.error(f"Erro na conexão WebSocket: {error}")
-    st.session_state.connected = False
+    if st.button("Adicionar pessoa"):
+        if len(photos) != 3:
+            st.warning("Carrega exatamente 3 fotos.")
+        elif not full_name.strip():
+            st.warning("Nome completo é obrigatório.")
+        else:
+            first_name = full_name.split()[0]
+            person_dir = os.path.join("known_faces", first_name)
+            os.makedirs(person_dir, exist_ok=True)
 
-def on_close(ws, close_status_code, close_msg):
-    st.session_state.connected = False
-    connection_status.warning("Desconectado do servidor")
+            for i, photo in enumerate(photos):
+                with open(os.path.join(person_dir, f"foto_{i+1}.jpg"), "wb") as f:
+                    f.write(photo.read())
 
-def on_open(ws):
-    st.session_state.connected = True
-    connection_status.success("Conectado ao servidor")
-    
-    # Enviar configurações iniciais
-    settings = {
-        "recognition_threshold": recognition_threshold,
-        "show_bounding_boxes": show_bounding_boxes,
-        "show_names": show_names
-    }
-    ws.send(json.dumps({"settings": settings}))
+            result = add_person(full_name, age, gender, person_dir, index_known, conn_known)
+            if result is None:
+                st.error("Erro ao adicionar. Verifica as imagens.")
+            else:
+                faiss.write_index(index_known, faiss_known_path)
+                st.success(f"{full_name} adicionad@ com sucesso!")
 
-# Função para conectar ao WebSocket
-def connect_to_websocket():
-    if st.session_state.connected:
-        return
-    
-    try:
-        ws = websocket.WebSocketApp(
-            websocket_url,
-            on_open=on_open,
-            on_message=on_message,
-            on_error=on_error,
-            on_close=on_close
-        )
-        
-        wst = threading.Thread(target=ws.run_forever)
-        wst.daemon = True
-        wst.start()
-        
-        st.session_state.ws = ws
-    except Exception as e:
-        st.error(f"Erro ao conectar: {e}")
-
-# Função para desconectar do WebSocket
-def disconnect_from_websocket():
-    if st.session_state.connected and st.session_state.ws:
-        st.session_state.ws.close()
-        st.session_state.connected = False
-        connection_status.warning("Desconectado do servidor")
-
-# Função para enviar mensagem de chat
-def send_chat_message():
-    if st.session_state.connected and st.session_state.ws and message_input:
-        message_data = {
-            "chat_message": message_input
-        }
-        st.session_state.ws.send(json.dumps(message_data))
-        
-        # Adicionar mensagem ao chat local
-        st.session_state.chat_messages.append({
-            "sender": "Você",
-            "message": message_input,
-            "timestamp": time.strftime("%H:%M:%S")
-        })
-        
-        # Limpar campo de entrada
-        st.session_state.message_input = ""
-
-# Atualização contínua da interface
-def update_ui():
-    # Atualizar vídeo
-    if st.session_state.frame is not None:
-        video_placeholder.image(st.session_state.frame, caption="Transmissão de vídeo", use_column_width=True)
-    else:
-        video_placeholder.info("Aguardando transmissão de vídeo...")
-    
-    # Atualizar estatísticas
-    stats = st.session_state.statistics
-    stats_placeholder[0].metric("Pessoas conhecidas", stats["known"])
-    stats_placeholder[1].metric("Novos desconhecidos", stats["new_unknown"])
-    stats_placeholder[2].metric("Desconhecidos retornando", stats["returning_unknown"])
-    stats_placeholder[3].metric("Total único", stats["unique_people"])
-    
-    # Atualizar faces detectadas
-    if st.session_state.faces:
-        faces_df = pd.DataFrame(st.session_state.faces)
-        faces_container.dataframe(faces_df, use_container_width=True)
-    else:
-        faces_container.info("Nenhuma pessoa detectada")
-    
-    # Atualizar recomendações
-    if st.session_state.recommendations:
-        recommendations_html = "<div style='max-height: 400px; overflow-y: auto;'>"
-        for person_id, recommendations in st.session_state.recommendations.items():
-            person_name = next((face["name"] for face in st.session_state.faces if face["id"] == person_id), "Desconhecido")
-            recommendations_html += f"<h4>{person_name} (ID: {person_id})</h4><ul>"
-            for rec in recommendations:
-                recommendations_html += f"<li><b>{rec['product_name']}</b> - {rec['description']}<br>Confiança: {rec['confidence']:.2f}</li>"
-            recommendations_html += "</ul>"
-        recommendations_html += "</div>"
-        recommendations_container.markdown(recommendations_html, unsafe_allow_html=True)
-    else:
-        recommendations_container.info("Nenhuma recomendação disponível")
-    
-    # Atualizar chat
-    chat_html = "<div style='max-height: 400px; overflow-y: auto;'>"
-    for msg in st.session_state.chat_messages:
-        sender_style = "color: blue;" if msg["sender"] == "Você" else "color: green;"
-        chat_html += f"<p><span style='{sender_style}'><b>{msg['sender']}</b> ({msg['timestamp']}):</span><br>{msg['message']}</p>"
-    chat_html += "</div>"
-    
-    with chat_container:
-        st.markdown(chat_html, unsafe_allow_html=True)
-
-# Processar botões de ação
-if connect_button:
-    connect_to_websocket()
-
-if disconnect_button:
-    disconnect_from_websocket()
-
-if send_button or (message_input and st.session_state.message_input != message_input):
-    send_chat_message()
-
-# Atualizar UI
-update_ui()
-
-# Conteúdo adicional - explicação sobre o sistema
+# ----------- FUNÇÃO: STREAMING DE VÍDEO COM RECONHECIMENTO -----------
 st.markdown("---")
-with st.expander("Sobre o Sistema de Reconhecimento Facial"):
-    st.markdown("""
-    ### Como funciona o Sistema
-    
-    Este sistema utiliza uma arquitetura cliente-servidor onde:
-    
-    1. **Servidor Backend**: Processa vídeo em tempo real com modelos de reconhecimento facial
-    2. **Frontend Streamlit**: Exibe os resultados e permite interação com o sistema
-    
-    ### Funcionalidades
-    
-    - **Reconhecimento facial** em tempo real
-    - **Identificação** de pessoas conhecidas e desconhecidas
-    - **Recomendações personalizadas** baseadas em histórico e perfil
-    - **Chat interativo** para consultas e feedback
-    
-    ### Privacidade e Segurança
-    
-    Os dados faciais são processados com padrões rigorosos de privacidade. Nenhuma imagem é armazenada permanentemente sem consentimento explícito.
-    """)
+st.subheader("📷 Câmera em tempo real com reconhecimento")
 
-# Timer para atualização automática (opcional)
-# No ambiente Streamlit, a página é recarregada a cada interação, então não é necessário um timer explícito
+run_camera = st.checkbox("Ativar câmera")
+
+if run_camera:
+    frame_placeholder = st.empty()
+    cap = cv2.VideoCapture(0)
+
+    while run_camera:
+        ret, frame = cap.read()
+        if not ret:
+            st.error("Erro ao acessar a câmera.")
+            break
+
+        frame = cv2.resize(frame, (1100, 720))
+        results = facemodel(frame, conf=0.5)[0]
+
+        if results.boxes is not None:
+            for box in results.boxes:
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                w, h = x2 - x1, y2 - y1
+                face = frame[y1:y2, x1:x2]
+
+                # Processamento da face
+                face_rgb = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)
+                face_pil = Image.fromarray(face_rgb)
+                face_tensor = transform(face_pil).unsqueeze(0).to(device)
+
+                with torch.no_grad():
+                    pred_age, pred_gender = gender_model(face_tensor)
+                age_pred = int(pred_age.item())
+                gender_pred = "Feminino" if pred_gender.item() > 0.5 else "Masculino"
+
+                # Reconhecimento
+                result = recognize_face(face, index_known, conn_known)
+                if result:
+                    full_name, idade, genero = result
+                    texto = f"{full_name} | {idade} anos | {genero}"
+                else:
+                    result_unknown = recognize_unknown_face(face, index_unknown, conn_unknown)
+                    if result_unknown:
+                        nome, idade, genero = result_unknown
+                        texto = f"{nome} (recorrente) | {idade} anos | {genero}"
+                    else:
+                        novo_nome = add_unknown_person(age_pred, gender_pred, face, index_unknown, conn_unknown)
+                        texto = f"{novo_nome} (novo) | {age_pred} anos | {gender_pred}"
+
+                # Exibir na imagem
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.putText(frame, texto, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
+        # Mostrar imagem em Streamlit
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame_placeholder.image(frame_rgb, channels="RGB")
+
+    cap.release()
+    faiss.write_index(index_known, faiss_known_path)
+    faiss.write_index(index_unknown, faiss_unknown_path)
