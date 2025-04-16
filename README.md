@@ -81,7 +81,7 @@ streamlit run app.py
         |         +----------------------------------------------+
 
 
-##🗃️ Estrutura de Diretórios
+##  🗃️ Estrutura de Diretórios
 .
 ├── app.py
 ├── utils.py
@@ -98,5 +98,5 @@ streamlit run app.py
 └── README.md
 
 
-##🙋‍♂️ Sobre
+##  🙋‍♂️ Sobre
 Este projeto foi desenvolvido como parte de uma tese de mestrado, com foco em reconhecimento facial inteligente aplicado em contextos como DOOH (Digital Out Of Home) e marketing personalizado com base em idade e gênero preditos.
