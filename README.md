@@ -66,7 +66,7 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-##Arquitetura do Sistema
+## Arquitetura do Sistema
 
                           +---------------------+
                           |     Streamlit UI    |
