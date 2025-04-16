@@ -53,31 +53,59 @@ transform = transforms.Compose([
 
 # ----------- FUNÇÃO: INTERFACE PARA ADICIONAR PESSOA -----------
 with st.expander("➕ Adicionar nova pessoa ao sistema"):
+
+    if "person_data_filled" not in st.session_state:
+        st.session_state.person_data_filled = False
+    if "photos_uploaded" not in st.session_state:
+        st.session_state.photos_uploaded = False
+        st.session_state.photo_paths = []
+
+    # Etapa 1: Dados da pessoa
     full_name = st.text_input("Nome completo")
     age = st.number_input("Idade", 0, 120)
     gender = st.selectbox("Gênero", ["Masculino", "Feminino"])
-    photos = st.file_uploader("Seleciona 3 fotos", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
 
-    if st.button("Adicionar pessoa"):
-        if len(photos) != 3:
-            st.warning("Carrega exatamente 3 fotos.")
-        elif not full_name.strip():
-            st.warning("Nome completo é obrigatório.")
-        else:
-            first_name = full_name.split()[0]
-            person_dir = os.path.join("known_faces", first_name)
-            os.makedirs(person_dir, exist_ok=True)
+    if full_name.strip() and age > 0:
+        st.session_state.person_data_filled = True
+        first_name = full_name.split()[0]
+        person_dir = os.path.join("known_faces", first_name)
+        os.makedirs(person_dir, exist_ok=True)
+    else:
+        st.session_state.person_data_filled = False
 
-            for i, photo in enumerate(photos):
-                with open(os.path.join(person_dir, f"foto_{i+1}.jpg"), "wb") as f:
-                    f.write(photo.read())
+    # Etapa 2: Upload de fotos (somente se dados foram preenchidos)
+    if st.session_state.person_data_filled:
+        photos = st.file_uploader("Seleciona 3 fotos da pessoa", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
 
+        if st.button("📸 Carregar Fotos"):
+            if len(photos) != 3:
+                st.warning("Carrega exatamente 3 fotos.")
+            else:
+                st.session_state.photo_paths = []
+                for i, photo in enumerate(photos):
+                    photo_path = os.path.join(person_dir, f"foto_{i+1}.jpg")
+                    with open(photo_path, "wb") as f:
+                        f.write(photo.read())
+                    st.session_state.photo_paths.append(photo_path)
+
+                st.session_state.photos_uploaded = True
+                st.success("Fotos carregadas com sucesso! Agora clica em 'Adicionar Pessoa'.")
+
+    # Etapa 3: Adicionar pessoa ao sistema
+    if st.session_state.person_data_filled and st.session_state.photos_uploaded:
+        if st.button("✅ Adicionar Pessoa"):
             result = add_person(full_name, age, gender, person_dir, index_known, conn_known)
             if result is None:
                 st.error("Erro ao adicionar. Verifica as imagens.")
             else:
                 faiss.write_index(index_known, faiss_known_path)
                 st.success(f"{full_name} adicionad@ com sucesso!")
+
+                # Resetar estado
+                st.session_state.person_data_filled = False
+                st.session_state.photos_uploaded = False
+                st.session_state.photo_paths = []
+
 
 # ----------- FUNÇÃO: STREAMING DE VÍDEO COM RECONHECIMENTO -----------
 st.markdown("---")
@@ -117,12 +145,12 @@ if run_camera:
                 # Reconhecimento
                 result = recognize_face(face, index_known, conn_known)
                 if result:
-                    full_name, idade, genero = result
+                    full_name, idade, genero, last_seen = result
                     texto = f"{full_name} | {idade} anos | {genero}"
                 else:
                     result_unknown = recognize_unknown_face(face, index_unknown, conn_unknown)
                     if result_unknown:
-                        nome, idade, genero = result_unknown
+                        nome, idade, genero, last_seen = result_unknown
                         texto = f"{nome} (recorrente) | {idade} anos | {genero}"
                     else:
                         novo_nome = add_unknown_person(age_pred, gender_pred, face, index_unknown, conn_unknown)
