@@ -93,7 +93,7 @@ streamlit run app.py
 
 
 ##  🗃️ Estrutura de Diretórios
-.
+
 ├── app.py
 ├── utils.py
 ├── utils_models.py
