@@ -1,122 +1,48 @@
 # Tese
 
-# Sistema de Reconhecimento Facial Inteligente com Cadastro em Tempo Real
+# 🧠 Sistema Inteligente de Reconhecimento Facial com Cadastro em Tempo Real
 
-Este projeto é um sistema completo de reconhecimento facial com suporte a:
+Este é um sistema completo de reconhecimento facial com predição de idade e gênero, integração com banco de dados e FAISS para busca de vetores faciais. Ele permite o **cadastro em tempo real de novas pessoas**, reconhecimento de **rostos conhecidos** e **visitantes desconhecidos recorrentes**, com uma interface interativa em **Streamlit**.
 
-📸 Cadastro dinâmico de pessoas conhecidas com 3 fotos
+---
 
-🤖 Predição de idade e gênero
+## ✨ Funcionalidades
 
-🧠 Reconhecimento de rostos conhecidos e visitantes recorrentes
+- 🎥 Reconhecimento facial em tempo real com webcam
+- 🧑‍💼 Cadastro de novas pessoas com nome, idade e gênero
+- 🔍 Identificação de pessoas conhecidas via FAISS
+- 🤖 Predição de idade e gênero com modelo treinado
+- 📁 Armazenamento e distinção de rostos desconhecidos (recorrentes ou novos)
+- 🗃️ Banco de dados SQLite para metadados
+- ⚡ Suporte a GPU (CUDA) ou CPU
 
-🕵️ Detecção e cadastro automático de visitantes novos
+---
 
-⚡ Funciona em tempo real, via web app leve com Streamlit
+## 🖼️ Interface
 
-#✨ Funcionalidades
-Detecção facial: YOLOv8n-face (modelo leve e rápido)
+| Cadastro de Pessoas | Reconhecimento em Tempo Real |
+|---------------------|-------------------------------|
+| ![Cadastro](assets/add_person.png) | ![Câmera](assets/realtime_recognition.png) |
 
-Reconhecimento facial: FaceNet (InceptionResNetV1)
+---
 
-Predição de idade e gênero: modelo PyTorch customizado
+## 🛠️ Tecnologias Utilizadas
 
-Indexação facial: FAISS (Facebook AI Similarity Search)
+- [Python 3.8+](https://www.python.org/)
+- [Streamlit](https://streamlit.io/)
+- [OpenCV](https://opencv.org/)
+- [FAISS](https://github.com/facebookresearch/faiss)
+- [YOLOv8](https://github.com/ultralytics/ultralytics)
+- [FaceNet (InceptionResnetV1)](https://github.com/timesler/facenet-pytorch)
+- [PyTorch](https://pytorch.org/)
+- SQLite
 
-Base de dados: SQLite para metadados (nome, idade, gênero)
+---
 
-Interface gráfica: Streamlit (leve e 100% Python)
+## 📦 Instalação
 
-#📁 Estrutura de Pastas
-bash
-Copiar
-Editar
-📦 Projeto
-├── known_faces/             # Armazena imagens das pessoas cadastradas
-├── faiss_known.index        # Índice FAISS com embeddings de pessoas conhecidas
-├── faiss_unknown.index      # Índice FAISS com embeddings de pessoas desconhecidas
-├── known.db                 # Banco de dados SQLite (conhecidos)
-├── unknown.db               # Banco de dados SQLite (desconhecidos)
-├── gender_age_model_new.pth # Modelo PyTorch de predição de idade e gênero
-├── yolov8n-face.pt          # Modelo YOLOv8 para detecção facial
-├── utils_models.py          # Modelo de idade/gênero
-├── utils.py                 # Funções auxiliares (embeddings, reconhecimento, etc)
-├── db_manager.py            # Funções de criação e manipulação dos bancos
-└── app.py                   # Aplicação principal com Streamlit
+1. Clone o repositório:
 
-#⚙️ Requisitos
-Python 3.8+
-
-PyTorch
-
-OpenCV
-
-Streamlit
-
-FAISS
-
-Pillow
-
-torchvision
-
-facenet-pytorch
-
-ultralytics (YOLO)
-
-SQLite3 (incluso no Python)
-
-Instalação via requirements.txt:
-
-bash
-Copiar
-Editar
-pip install -r requirements.txt
-#🚀 Como Executar
-Certifica-te que tens a webcam funcionando.
-
-Coloca os arquivos dos modelos (yolov8n-face.pt, gender_age_model_new.pth) na raiz do projeto.
-
-Roda o app com Streamlit:
-
-bash
-Copiar
-Editar
-streamlit run app.py
-Acede no navegador (geralmente abre automaticamente):
-
-arduino
-Copiar
-Editar
-http://localhost:8501
-🧪 Como Testar
-Na seção "Adicionar nova pessoa", preenche nome, idade e gênero, e faz upload de 3 fotos.
-
-Ativa a câmera em "Câmera em tempo real com reconhecimento".
-
-O sistema vai:
-
-Reconhecer pessoas cadastradas com nome e dados.
-
-Detectar visitantes recorrentes (desconhecidos já vistos).
-
-Cadastrar novos visitantes automaticamente com ID incremental.
-
-#🛡️ Segurança & Privacidade
-Todo o processamento é feito localmente, sem upload para a internet.
-
-Ideal para sistemas offline e com restrições de privacidade.
-
-#📌 Possíveis Melhorias Futuras
-Exportar dados para CSV/Excel.
-
-Dashboard de estatísticas com Streamlit.
-
-Módulo de notificação (email ou Telegram).
-
-Otimização com TensorRT para maior velocidade.
-
-👨‍💻 Autor
-Teu Nome
-Engenheiro de Dados & IA
-📍 Lisboa, Portugal
-🔗 LinkedIn | GitHub
+```bash
+git clone https://github.com/seu-usuario/sistema-reconhecimento-facial.git
+cd sistema-reconhecimento-facial
