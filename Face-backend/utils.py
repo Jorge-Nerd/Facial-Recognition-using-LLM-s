@@ -20,6 +20,11 @@ def get_embedding(image):
             img = cv2.imread(image)
         else:
             img = image
+
+        if img is None:
+            print("Imagem inválida.")
+            return None
+
         img = cv2.resize(img, (160, 160))
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img = img.astype('float32') / 255.0
@@ -27,21 +32,32 @@ def get_embedding(image):
 
         with torch.no_grad():
             embedding = resnet(img).cpu().numpy()[0]
+
         return embedding
+
     except Exception as e:
         print(f"Erro no embedding: {str(e)}")
         return None
+
+
 def get_average_embedding(person_dir):
     embeddings = []
     for image_file in os.listdir(person_dir):
         image_path = os.path.join(person_dir, image_file)
         if os.path.isfile(image_path):
             embedding = get_embedding(image_path)
-            embeddings.append(embedding)
+            if embedding is not None:
+                embeddings.append(embedding)
+            else:
+                print(f"Embedding inválido: {image_path}")
+
     if len(embeddings) == 0:
+        print("Nenhum embedding válido foi encontrado.")
         return None
-    average_embedding = np.mean(embeddings, axis=0)
+
+    average_embedding = np.mean(embeddings, axis=0).astype(np.float32)
     return average_embedding
+
 
 def recognize_face(frame, index, conn, threshold=0.8):
     """
@@ -71,9 +87,9 @@ def recognize_face(frame, index, conn, threshold=0.8):
         if res:
             full_name, age, gender = res
             now = datetime.datetime.now().isoformat()
-            cursor.execute("UPDATE persons SET last_seen=?, total_seen=total_seen+1 WHERE faiss_id=?", (now, faiss_id))
+            cursor.execute("UPDATE persons SET last_seen=? WHERE faiss_id=?", (now, faiss_id))
             conn.commit()
-            return full_name, age, gender
+            return full_name, age, gender, now
     return None
 
 def recognize_unknown_face(frame, index, conn, threshold=0.75):
@@ -106,7 +122,7 @@ def recognize_unknown_face(frame, index, conn, threshold=0.75):
             now = datetime.datetime.now().isoformat()
             cursor.execute("UPDATE strangers SET last_seen=?, total_seen=total_seen+1 WHERE faiss_id=?", (now, faiss_id))
             conn.commit()
-            return name, age, gender
+            return name, age, gender, now
     return None
 
 def add_person(full_name, age, gender, person_dir, index_known, conn_known):
@@ -117,15 +133,21 @@ def add_person(full_name, age, gender, person_dir, index_known, conn_known):
         return None
 
     faiss_id = index_known.ntotal
-    index_unknown.add(np.expand_dims(average_embedding, axis=0))
-
+    index_known.add(np.expand_dims(average_embedding, axis=0).astype(np.float32))
+    now = datetime.datetime.now().isoformat()
     cursor.execute('''
-        INSERT INTO persons (full_name, age, gender, faiss_id, last_seen)
-        VALUES (?, ?, ?, ?)
-    ''', (full_name, age, gender, faiss_id))
+        INSERT INTO persons (faiss_id,full_name, age, gender, last_seen)
+        VALUES (?, ?, ?, ?,?)
+    ''', ( faiss_id,full_name, age, gender,now))
 
     conn_known.commit()
-    
+    return {
+        "faiss_id": faiss_id,
+        "name": full_name,
+        "age": age,
+        "gender": gender,
+        "path": person_dir
+    }
 
 def add_unknown_person(age, gender, frame, index_unknown, conn_unknown):
     cursor = conn_unknown.cursor()
