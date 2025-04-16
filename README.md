@@ -1,5 +1,5 @@
 # Tese
-# Facial Recognition ad detection with age and gender prediction
+
 # Sistema de Reconhecimento Facial Inteligente com Cadastro em Tempo Real
 
 Este projeto é um sistema completo de reconhecimento facial com suporte a:
