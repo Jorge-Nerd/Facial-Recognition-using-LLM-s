@@ -45,4 +45,6 @@ Este é um sistema completo de reconhecimento facial com predição de idade e g
 
 ```bash
 git clone https://github.com/Jorge-Nerd/Tese.git
-cd Tese
+cd Tese 
+
+2. Crie um ambiente virtual e ative:
