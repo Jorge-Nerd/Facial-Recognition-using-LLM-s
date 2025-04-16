@@ -44,5 +44,5 @@ Este é um sistema completo de reconhecimento facial com predição de idade e g
 1. Clone o repositório:
 
 ```bash
-git clone https://github.com/seu-usuario/sistema-reconhecimento-facial.git
-cd sistema-reconhecimento-facial
+[git clone https://github.com/seu-usuario/sistema-reconhecimento-facial.git](https://github.com/Jorge-Nerd/Tese.git)
+cd Tese
