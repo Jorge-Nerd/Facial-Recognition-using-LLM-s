@@ -45,6 +45,58 @@ Este é um sistema completo de reconhecimento facial com predição de idade e g
 
 ```bash
 git clone https://github.com/Jorge-Nerd/Tese.git
-cd Tese 
+cd Tese
 
-2. Crie um ambiente virtual e ative:
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate     # Windows
+
+pip install -r requirements.txt
+
+streamlit run app.py
+```
+
+##Arquitetura do Sistema
+                          +---------------------+
+                          |     Streamlit UI    |
+                          +----------+----------+
+                                     |
+                                     v
+               +--------------------+--------------------+
+               |    Fast Face Detection (YOLOv8n-face)   |
+               +--------------------+--------------------+
+                                     |
+        +----------------------------+----------------------------+
+        |            +---------------v--------------+             |
+        |            |   Face Embedding (FaceNet)   |             |
+        |            +---------------+--------------+             |
+        |                            |                            |
+        |                            v                            |
+        |      +--------------------+--------------------+        |
+        |      |         FAISS Search (Known / Unknown)  |        |
+        |      +--------------------+--------------------+        |
+        |                            |                            |
+        |         +------------------+-----------------+          |
+        |         |       SQLite (known.db / unknown.db)         |
+        |         +----------------------------------------------+
+
+
+##🗃️ Estrutura de Diretórios
+.
+├── app.py
+├── utils.py
+├── utils_models.py
+├── db_manager.py
+├── gender_age_model_new.pth
+├── yolov8n-face.pt
+├── known_faces/
+├── faiss_known.index
+├── faiss_unknown.index
+├── known.db
+├── unknown.db
+├── requirements.txt
+└── README.md
+
+
+##🙋‍♂️ Sobre
+Este projeto foi desenvolvido como parte de uma tese de mestrado, com foco em reconhecimento facial inteligente aplicado em contextos como DOOH (Digital Out Of Home) e marketing personalizado com base em idade e gênero preditos.
