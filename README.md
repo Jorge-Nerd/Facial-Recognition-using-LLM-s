@@ -46,17 +46,28 @@ Este é um sistema completo de reconhecimento facial com predição de idade e g
 ```bash
 git clone https://github.com/Jorge-Nerd/Tese.git
 cd Tese
+```
+2. Crie um ambiente virtual e ative:
 
+```bash
 python -m venv venv
 source venv/bin/activate  # Linux/Mac
 venv\Scripts\activate     # Windows
+```
+3. Instale as dependências:
 
+```bash
 pip install -r requirements.txt
+```
 
+4. Execute a aplicação:
+
+```bash
 streamlit run app.py
 ```
 
 ##Arquitetura do Sistema
+
                           +---------------------+
                           |     Streamlit UI    |
                           +----------+----------+
