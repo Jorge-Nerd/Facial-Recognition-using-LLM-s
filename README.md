@@ -43,6 +43,7 @@ Editar
 ├── utils.py                 # Funções auxiliares (embeddings, reconhecimento, etc)
 ├── db_manager.py            # Funções de criação e manipulação dos bancos
 └── app.py                   # Aplicação principal com Streamlit
+
 #⚙️ Requisitos
 Python 3.8+
 
