@@ -26,7 +26,7 @@ sqlite-utils==3.36
 torch==2.2.1
 torchvision==0.17.1
 
-# Modelos e LLM (opcional se fores usar LLaMA ou RAG depois)
+# Modelos e LLM (opcional se fores usar LLaMA ou RAG )
 transformers==4.40.0
 sentence-transformers==2.6.1
 
