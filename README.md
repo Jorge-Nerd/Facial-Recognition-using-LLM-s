@@ -46,7 +46,7 @@ erson.png) | ![Câmera](assets/realtime_recognition.png) |
 
 ```bash
 git clone https://github.com/Jorge-Nerd/Tese.git
-cd Tese
+cd Tese/Face-backend
 ```
 2. Crie um ambiente virtual e ative:
 
