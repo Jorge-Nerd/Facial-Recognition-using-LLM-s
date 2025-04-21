@@ -22,8 +22,7 @@ Este é um sistema completo de reconhecimento facial com predição de idade e g
 
 | Cadastro de Pessoas | Reconhecimento em Tempo Real |
 |---------------------|-------------------------------|
-| ![cadastro](https://github.com/user-attachments/assets/7462df01-7ac6-4203-8b65-7e8366f3cae8)
-erson.png) | ![Câmera](assets/realtime_recognition.png) |
+| ![Câmera](assets/realtime_recognition.png) ) | ![Câmera](assets/realtime_recognition.png) |
 
 ---
 
