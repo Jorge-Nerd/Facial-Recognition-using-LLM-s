@@ -30,6 +30,7 @@ Este é um sistema completo de reconhecimento facial com predição de idade e g
 
 - [Python 3.8+](https://www.python.org/)
 - [Streamlit](https://streamlit.io/)
+- [Roboflow](https://universe.roboflow.com/large-benchmark-datasets/wider-face-ndtcz/dataset/1/download/yolov8)
 - [OpenCV](https://opencv.org/)
 - [FAISS](https://github.com/facebookresearch/faiss)
 - [YOLOv8](https://github.com/ultralytics/ultralytics)
