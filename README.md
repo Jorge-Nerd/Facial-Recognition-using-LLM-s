@@ -67,6 +67,13 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
+5. Execute a indexação(sempre que houver novas faces):
+
+```bash
+python rag/build_rag_index.py
+
+```
+
 ## Arquitetura do Sistema
 
                           +---------------------+
